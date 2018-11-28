@@ -180,12 +180,11 @@ fn echo_test(port: &mut SystemPort, wdata: &[u8]) -> bool {
     let num_bits = 8.0 * (wdata.len() as f64);
     let bit_rate = (8.0 * (baudrate.speed() as f64)) / 10.0;
     // This is for one trip only, and we need to account for the bits on the way back by
-    // multiplying by 2 to get the full path
+    // multiplying by 2 to get the full path, though 3 is used to get the full path. A minimum time
+    // of 10 milliseconds is enforced.
     let seconds = num_bits / bit_rate;
-    let millis = 1000.0 * seconds;
-    // The time only needs to be multiplied by a factor of 2 to get the whole round trip, though 3
-    // is used just to guaranteed that enough time passes.
-    thread::sleep(time::Duration::from_millis((3.0 * millis) as u64));
+    let sleep_millis = time::Duration::from_millis((10.0 + 3.0 * 1000.0 * seconds) as u64);
+    thread::sleep(sleep_millis);
 
     // Read back the data
     let mut rdata = zero_data(wdata.len());

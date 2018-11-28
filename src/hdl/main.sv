@@ -6,12 +6,12 @@
 /// # Ports
 ///
 /// *   [clk] is the 100MHz off-chip clock.
-/// *   [reset] is the active high system reset signal.
+/// *   [rst] is the active high system reset signal.
 /// *   [usb_rx] is the receive end of the serial.
 /// *   [usb_tx] is the transmit end of the serial.
 module main(
     input logic clk,
-    input logic reset,
+    input logic rst,
     input logic usb_rx,
     output logic usb_tx);
 
@@ -19,25 +19,25 @@ module main(
     localparam int DIVIDER = 868;
 
     // The data received and sent over serial
-    logic [7:0] data;
+    logic [7:0] d;
 
     // Indicates that a byte was received
-    logic receive_ready;
+    logic recv_rdy;
 
-    uart_receive #(.DIVIDER(DIVIDER)) uart_receive(
+    uart_recv #(.DIVIDER(DIVIDER)) uart_recv(
         .clk(clk),
-        .reset(reset),
+        .rst(rst),
         .rx(usb_rx),
-        .data(data),
-        .ready(receive_ready)
+        .d(d),
+        .rdy(recv_rdy)
     );
 
-    uart_transmit #(.DIVIDER(DIVIDER)) uart_transmit(
+    uart_send #(.DIVIDER(DIVIDER)) uart_send(
         .clk(clk),
-        .reset(reset),
-        .data(data),
-        .send(receive_ready),
-        .ready(/* Not connected */),
+        .rst(rst),
+        .d(d),
+        .send(recv_rdy),
+        .rdy(/* Not connected */),
         .tx(usb_tx)
     );
 
