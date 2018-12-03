@@ -46,31 +46,6 @@ module uart_send #(
     // The 10-bit frame to be sent
     logic [9:0] frame;
 
-    // The state machine for sending the bits.
-    enum {
-        WAITING,
-        SEND_0,
-        SEND_1,
-        SEND_2,
-        SEND_3,
-        SEND_4,
-        SEND_5,
-        SEND_6,
-        SEND_7,
-        SEND_8,
-        SEND_9
-    } state;
-
-    // Sends the [curr_data] from the [curr_state] and transitions into
-    // [next_state]. Additionally, this updates the `rdy` to the value of
-    // [next_rdy].
-    `define ADVANCE_STATE(curr_state, curr_data, next_state, next_rdy=0) \
-        curr_state: if (baud_clk) begin                                  \
-            rdy   <= next_rdy;                                           \
-            state <= next_state;                                         \
-            tx    <= curr_data;                                          \
-        end
-
     // Track the previous value of send for edge detection
     logic send_prev;
     always_ff @(posedge clk) begin
@@ -83,44 +58,57 @@ module uart_send #(
         end
     end
 
+    /// The combined index and state tracker for transmitting a byte.
+    int i;
+
+    /// The sentinel values that `i` can take that indicate when a byte should
+    /// start being sent, when the byte has finished sending, and when the the
+    /// system is waiting to latch the next byte.
+    localparam int START_I = 0;
+    localparam int DONE_I  = 10;
+    localparam int WAIT_I  = 11;
+
+    /// The counter for how many [clk] cycles to wait on the stop bit before
+    /// moving to the wait state.
+    int w;
+
+    /// The number of [clk] cycles to wait on the stop bit before latching the
+    /// next values to send.
+    localparam WAIT_COUNT = (3 * DIVIDER) / 4;
+
     always_ff @(posedge clk) begin
         if (rst) begin
-            clr   <= 1;
-            rdy   <= 1;
-            state <= WAITING;
-            tx    <= 1;
-        end else begin
-            case (state)
-                WAITING: begin
-                    tx    <= 1;
-                    if (!send_prev && send) begin
-                        clr   <= 0;
-                        frame <= {1'b1, d, 1'b0};
-                        rdy   <= 0;
-                        state <= SEND_0;
-                    end else begin
-                        clr <= 1;
-                    end
-                end
-                `ADVANCE_STATE(SEND_0, frame[0], SEND_1)
-                `ADVANCE_STATE(SEND_1, frame[1], SEND_2)
-                `ADVANCE_STATE(SEND_2, frame[2], SEND_3)
-                `ADVANCE_STATE(SEND_3, frame[3], SEND_4)
-                `ADVANCE_STATE(SEND_4, frame[4], SEND_5)
-                `ADVANCE_STATE(SEND_5, frame[5], SEND_6)
-                `ADVANCE_STATE(SEND_6, frame[6], SEND_7)
-                `ADVANCE_STATE(SEND_7, frame[7], SEND_8)
-                `ADVANCE_STATE(SEND_8, frame[8], SEND_9)
-                `ADVANCE_STATE(SEND_9, frame[9], WAITING, 1)
-            endcase
+            clr <= 1;
+            i   <= WAIT_I;
+            rdy <= 1;
+            tx  <= 1;
+            w   <= WAIT_COUNT;
+        // Waiting to latch the input to send
+        end else if (i == WAIT_I) begin
+            tx <= 1;
+            if (!send_prev && send) begin
+                clr   <= 0;
+                i     <= START_I;
+                frame <= {1'b1, d, 1'b0};
+                rdy   <= 0;
+                w     <= WAIT_COUNT;
+            end
+        // After sending a byte, wait a bit before sending the next one so
+        // that there is enough time for the stop bit to be seen.
+        end else if (i == DONE_I) begin
+            clr <= 1;
+            i   <= w <= 1 ? WAIT_I : i;
+            w   <= w - 1;
+        // Send out the bits in the baud clock
+        end else if (baud_clk) begin
+            tx <= frame[i];
+            i  <= i + 1;
         end
     end
 
-    `undef ADVANCE_STATE
-
 endmodule
 
-/// The transmit part of a UART that can send data over serial.
+/// The receive part of a UART that can read data over serial.
 ///
 /// # Parameters
 ///
