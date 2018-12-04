@@ -74,7 +74,7 @@ module uart_send #(
 
     /// The number of [clk] cycles to wait on the stop bit before latching the
     /// next values to send.
-    localparam WAIT_COUNT = (3 * DIVIDER) / 4;
+    localparam int WAIT_COUNT = (3 * DIVIDER) / 4;
 
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -97,9 +97,10 @@ module uart_send #(
         // that there is enough time for the stop bit to be seen.
         end else if (i == DONE_I) begin
             clr <= 1;
-            i   <= w <= 1 ? WAIT_I : i;
+            i   <= w <= 0 ? WAIT_I : i;
+            rdy <= w <= 0 ? 1      : 0;
             w   <= w - 1;
-        // Send out the bits in the baud clock
+        // Send out the bits on the baud clock
         end else if (baud_clk) begin
             tx <= frame[i];
             i  <= i + 1;
